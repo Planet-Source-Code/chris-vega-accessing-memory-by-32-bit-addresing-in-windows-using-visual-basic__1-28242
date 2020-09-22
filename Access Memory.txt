@@ -1,0 +1,339 @@
+Accessing Memory by 32-bit Addresing in Windows using Visual Basic
+
+July 6, 2001
+Manila, Philippines
+
+By: Chris Vega [gwapo@models.com]
+
+When we talk about *real* Pointer and Memory Addressing, most of us thinks of
+Visual Basic limitations, ie, VB cannot access memory because VB has no pointer 
+datatype for a variable declarations. This confusion grow even larger when
+a scenarios needed one *address* of a variable instead of its value, ie, from
+where in memory was that variable located into a virtual space of currently 
+running process or a process or dynamic library.
+
+Yes, there is actually *no* pointer variable for VB, but have you ever tried to
+turn a regular VB Datatype into a Pointer? do you think its not possible? well,
+think again, cause in Visual Basic (starting from release version 5), a serries 
+of handy funtions is presented by Microsoft to turn this regular variables of
+yours into a pointer, these are:
+
+	1] VarPtr - Returns the Address of a Variable or Array Element
+           StrPtr - Returns the Address of String
+
+		Variables in Visual Basic, except Strings are located into its 
+		Memory Location, you can get the Address of this variable by 
+		calling VarPtr Function. Strings however are stored as BSTR's,
+		a pointer to a "pointer on array of characters", where you need
+		StrPtr to have the address of "pointer to the array of characters"
+		instead an address to BSTR if you used VarPtr in String.
+
+		ex.
+			Dim ptrMyPointer As Long
+			Dim intMyInteger As Integer
+			Dim strMyString As String * 25
+
+			' A call
+
+			ptrMyPointer = VarPtr(intMyInteger)
+
+			' gives ptrMyPointer a 32-bit Address of the Variable
+			' intMyInteger in Memory
+
+			strMyString = "Address of Variable : " & Hex(ptrMyPointer)
+
+			MsgBox strMyString
+
+			' Next, a call
+
+			ptrMyPointer = StrPtr(strMyString)
+
+			' gives the Address of the First Element of the Array of 
+			' Character, ie, First letter of the String.
+
+
+	2] VarPtrArray - Returns the Address of an Array of Variables
+	   VarPtrStringArray - Returns the Address of an Array of Strings
+
+		Arrays in Visual Basic are store in SAFEARRAYs, and you need to
+		use the function VarPtrArray to get the address of this array, but
+		before you can use the function, you need to manually declare the 
+		function from msvbvm50.dll to your VB Application.
+
+		ex.
+
+			' for VB 5
+			' ========
+			Declare Function VarPtrArray _
+                                         Lib "msvbvm50.dll" Alias "VarPtr" _
+			                 (Var() as Any) As Long
+
+			' for VB 6
+			' ========
+			Declare Function VarPtrArray _
+                                         Lib "msvbvm60.dll" Alias "VarPtr" _
+			                 (Var() as Any) As Long 
+
+			' The Call
+
+			Dim lngSafeArrayAddress As Long
+			Dim lngArrayOfLongs(6) As Long
+			Dim i As Long
+
+			Randomize
+			For i = 0 to 6
+				lngArrayOfLongs = Int(Rnd * &HFFFF)
+			Next
+
+			lngSafeArrayAddress = VarPtrArray(lngArrayOfLongs()) 
+
+			' Returns the Safe Address of an Array lngArrayOfLongs, you
+			' can simply use 'em for *fast* sorting or many more!
+
+		VarPtrStringArray however are more difficult to incorporate into
+		you application since you need to create a TypeLibrary and manually
+		refference the Library into VB Application.  
+
+		To make a Type Library, you need a MIDL compiler, a CommandLine tool
+		that compiles *.odl file into a Type Library,
+
+		For VB5 Create a Text File and Save it to VB5StrPtr.odl with content:
+
+		-------------Cut here--------------------------------------------------
+		#define RTCALL _stdcall
+		[
+		uuid(6E814F00-7439-11D2-98D2-00C04FAD90E7),
+		lcid (0), version(5.0), helpstring("VarPtrStringArray Support for VB5")
+		]
+		library PtrLib
+		{
+		importlib ("stdole2.tlb");
+		[dllname("msvbvm50.dll")]
+		module ArrayPtr
+		   {
+		   [entry("VarPtr")]
+		   long RTCALL VarPtrStringArray([in] SAFEARRAY (BSTR) *Ptr);
+		   }
+		} 
+		----------End Cut here-------------------------------------------------
+
+		And compile it with:
+			MIDL /t VB5StrPtr.odl
+
+
+		For VB6 Create a Text File and Save it to VB6StrPtr.odl with content:
+
+		-------------Cut here--------------------------------------------------
+		#define RTCALL _stdcall
+		[
+		uuid(C6799410-4431-11d2-A7F1-00A0C91110C3),
+		lcid (0), version(6.0), helpstring("VarPtrStringArray Support for VB6")
+		]
+		library PtrLib
+		{
+		importlib ("stdole2.tlb");
+		[dllname("msvbvm60.dll")]
+		module ArrayPtr
+		   {
+		   [entry("VarPtr")]
+		   long RTCALL VarPtrStringArray([in] SAFEARRAY (BSTR) *Ptr);
+		   }
+		} 
+		----------End Cut here-------------------------------------------------
+
+		And compile it with:
+			MIDL /t VB6StrPtr.odl
+
+
+		Now, you have the Type Library, and Referrenced the Library to your VB
+		Application, you can get the Array of Strings in this way:
+
+		Dim MyArrayOfStrings(3) As String
+		Dim AddressOfArray As Long
+		MyArrayOfStrings(0)="Chris"
+		MyArrayOfStrings(1)="Vega"
+		MyArrayOfStrings(2)="gwapo@models.com"
+
+		' A call
+		AddressOfArray = VarPtrStringArray ( MyArrayOfStrings() ) 
+
+		' gives you the Address of the first element in the Array and First
+		' character of this element, ie, Address where "C" is located in
+		' Memory
+
+		' *** How about it, you dont have MIDL compiler? or dont want to go
+		' into a process of creating Type Library and Referencing it manually,
+		' a simple approach of using StrPtr will be handly enough for you, since
+		' this function has the capability of getting the Address of a String, and
+		' each element in an Array of Strings is non other than String, so you
+		' get the picture clear, you have to point your call to the first element
+		' of the Array of String and call
+
+		AddressOfArray = StrPtr ( MyArrayOfStrings(0) )
+
+		' returns the same result as the above call
+
+
+	3] ObjPtr - Returns the Address of an Object
+
+		Object Oriented Programming consist of Objects, and these objects also
+		stored into Memory together with all of its properties, as a structured
+		layout, and to obtain its location you need to call ObjPtr Funtion
+
+		ex.
+			' You want to know where is your Form1 resides in Memory, this
+			' Method gives you the Address, in Thread
+
+			Dim objMyObject As New Form1
+
+			MsgBox "Form1 located at : " & Hex( ObjPtr( objMyObject ) )
+
+
+Ok, from this point, you are thinking on, How in the world should this Address becomes
+useful in anyways? well the answer is very clear if you think this way, an Address is
+a Location in Memory, and your Variables is a Location in Memory with its own Location
+in Memory, confused? well, to make it simple, you can simply think that this Address is
+a Location where Datas are stored, and Datas are READABLE and WRITABLE, but you need the
+Address to have it Written or Read the Data on it, Hmmm, Is Visual Basic Capable of
+doing these things?
+
+Well, not, if you think plain as in Visual Basic Capability, but APIs are functions that
+are ready for use by you application, the APIs im blabing about is a RunTime Libararies
+called RtlMoveMemory and RtlCopyMemory, exported by KERNEL32.DLL.
+
+Aint it charming? First we have found a way to achieve a Memory Address by converting a
+Variable into a Pointer, Now we have ways to Read and Write to anf from these addresses,
+but how you may ask? By adding either one of this Declarations to your Application, but not
+both, since they funtion the same, i suggest use the second one since it supported by all
+Windows System, while RtlCopyMemory is not.
+
+
+	Private Declare Sub CopyMemory _
+        	            Lib "kernel32" Alias _
+                	    "RtlCopyMemory" _
+	                    (Destination As Any, _
+        	             Source As Any, _
+                	     ByVal length As Long)
+	' RtlCopyMemory copies the contents of one buffer to another.
+
+	' OR
+
+	Private Declare Sub CopyMemory _
+        	            Lib "kernel32" Alias _
+                	    "RtlMoveMemory" _
+	                    (Destination As Any, _
+        	             Source As Any, _
+                	     ByVal length As Long)
+
+	' RtlMoveMemory moves memory either forward or backward, aligned or unaligned, 
+	' in 4-byte blocks, followed by any remaining bytes. 
+
+Parameters:
+
+	Destination 
+		Points to the destination of the move. 
+
+	Source 
+		Points to the memory to be copied. 
+
+	Length 
+		Specifies the number of bytes to be copied. 
+
+To make it more easy to Use, Included the File modMemory.bas for Copy and Paste
+in this Article:
+
+------------cut here------------------------------------------------------------------
+
+	Attribute VB_Name = "modMemory"
+	' =============================================================================
+	' Copy Memory API
+	' =============================================================================
+	Private Declare Sub CopyMemory _
+        	            Lib "kernel32" Alias _
+                	    "RtlMoveMemory" _
+	                    (Destination As Any, _
+        	             Source As Any, _
+                	     ByVal length As Long)
+                     
+	' =============================================================================
+	' Data Sizes
+	' =============================================================================
+	Public Enum e_BinaryData
+	    DefineByte = 1                          '  8 Bits Data
+	    DefineWord = 2                          ' 16 Bits Data
+	    DefineDoubleWord = 4                    ' 32 Bits Data
+	    DefineQuadWord = 8                      ' 64 Bits Data
+	End Enum
+
+	' =============================================================================
+	' Allows Direct Reading from Memory Pointed by MemPointer
+	' with definition of bytes used as in Asm (DB, DW, DD, DX)
+	' =============================================================================
+	Function ReadMem(ByVal MemPointer As Long, _
+	                 SizeInBytes As e_BinaryData)
+	    Select Case SizeInBytes
+	        Case DefineByte
+	            Dim DB As Byte
+	            CopyMemory DB, ByVal MemPointer, 1
+	            ReadMem = DB
+	        Case DefineWord
+	            Dim DW As Integer
+	            CopyMemory DW, ByVal MemPointer, 2
+	            ReadMem = DW
+	        Case DefineDoubleWord
+	            Dim DD As Long
+	            CopyMemory DD, ByVal MemPointer, 4
+	            ReadMem = DD
+	        Case DefineQuadWord
+	            Dim DX As Double
+	            CopyMemory DX, ByVal MemPointer, 8
+	            ReadMem = DX
+	    End Select
+	End Function
+
+	' =============================================================================
+	' Allows Direct Writing to Memory Pointed by MemPointer
+	' with definition of bytes used as in Asm (DB, DW, DD, DX)
+	' =============================================================================
+	Sub WriteMem(ByVal MemPointer As Long, _
+	             SizeInBytes As e_BinaryData, _
+	             ByVal DataToWrite)
+	    CopyMemory ByVal MemPointer, VarPtr(DataToWrite), SizeInBytes
+	End Sub
+
+------------end cut here---------------------------------------------------------------
+
+
+Usage:
+
+	To assign to a variable using memory:
+
+		Dim ptrVariable As Long
+		Dim xCounter As Long
+
+		ptrVariable = VarPtr(ptrVariable)
+		WriteMem ptrVariable, DefineWord, &HFFFF 
+			' Same as ptrVariable = &HFFFF
+
+
+	To read from a Memory, use:
+
+		ptrVariable = ReadMem(ptrVariable, DefineWord)
+
+
+Wow, we got a Pointer and we can access them now, but if you time instructions, you
+may be amazed that a raw Visual Basic Assignment Operations is much faster that
+of the Direct Memory Assignment Operation, but what i am pointing out here is that
+Memory can now be Accessed Using Visual Basic, and the global Idea of this is to
+Read and Analyse not only the Variable, from this Downward, you can simply run through
+running DLL by acquiring their memory addresses, equiped with modMemory.bas with
+knowledge of Portable Executable format, Bingo, you can play with the DLL Body, See
+how they process and best of all, Get a List of all of its Exported Functions; and
+before i forgot, why not spy em out or even get a copy of their function body to
+Disassembly purpose, all of which and more are accessible on Low Level Languages, 
+thats why C was declared as Industry Standard; Now you can write Visual Basic 
+Application that can performs like C, goodluck
+
+
+
+- Chris Vega [gwapo@models.com]
